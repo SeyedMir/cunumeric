@@ -29,7 +29,7 @@ except (ImportError, RuntimeError):
         return perf_counter_ns() / 1000.0
 
 
-def run_einsum(expr, N, iters, dtype, cupy_compatibility):
+def run_einsum(expr, N, iters, dtype, cupy_compatibility, warmup):
     # Parse contraction expression
     m = re.match(r"([a-zA-Z]*),([a-zA-Z]*)->([a-zA-Z]*)", expr)
     assert m is not None
@@ -91,7 +91,9 @@ def run_einsum(expr, N, iters, dtype, cupy_compatibility):
 
     # Run contraction
     start = time()
-    for _ in range(iters):
+    for i in range(iters):
+        if i == warmup:
+            start2 = time()
         if cupy_compatibility:
             C = np.einsum(expr, A, B)
         else:
@@ -112,7 +114,9 @@ def run_einsum(expr, N, iters, dtype, cupy_compatibility):
 
     # Print statistics
     total = (stop - start) / 1000.0
+    total2 = (stop - start2) / 1000.0
     average = total / iters
+    print(f"Elapsed Time excluding warmup: {total2} ms")
     print(f"Elapsed Time: {total:.3f} ms")
     print(f"Average Iteration: {average:.3f} ms")
     print(f"FLOPS/s: {flops / (average * 1e6):.3f} GFLOPS/s")
@@ -143,6 +147,14 @@ if __name__ == "__main__":
         default=10,
         dest="iters",
         help="number of iterations to run",
+    )
+    parser.add_argument(
+        "-w",
+        "--warmup",
+        type=int,
+        default=1,
+        dest="warmup",
+        help="warm-up iterations",
     )
     parser.add_argument(
         "-t",
@@ -224,5 +236,6 @@ if __name__ == "__main__":
             args.iters,
             dtypes[args.dtype],
             cupy_compatibility,
+            args.warmup
         ),
     )

@@ -16,11 +16,13 @@
 #
 
 import math
+import nvtx
 from functools import reduce
 
 
 # A helper method for benchmarking applications
 def run_benchmark(f, samples, name, args):
+    range_id = nvtx.start_range("run_benchmark", color="red")
     if samples > 1:
         results = [f(*args) for s in range(samples)]
         # Remove the largest and the smallest ones
@@ -45,3 +47,4 @@ def run_benchmark(f, samples, name, args):
     else:
         # Just run the application like normal
         f(*args)
+    nvtx.end_range(range_id)

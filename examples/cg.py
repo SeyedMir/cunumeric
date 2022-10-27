@@ -75,7 +75,7 @@ def generate_2D(N, corners):
     return A, b
 
 
-def solve(A, b, conv_iters, max_iters, conv_threshold, verbose):
+def solve(A, b, conv_iters, max_iters, conv_threshold, verbose, warmup):
     print("Solving system...")
     x = np.zeros(A.shape[1])
     r = b - A.dot(x)
@@ -86,7 +86,9 @@ def solve(A, b, conv_iters, max_iters, conv_threshold, verbose):
     max_iters = (
         min(max_iters, b.shape[0]) if max_iters is not None else b.shape[0]
     )
-    for i in range(max_iters):
+    for i in range(max_iters + warmup):
+        if i == warmup:
+            start = time()
         Ap = A.dot(p)
         alpha = rsold / (p.dot(Ap))
         x = x + alpha * p
@@ -108,6 +110,9 @@ def solve(A, b, conv_iters, max_iters, conv_threshold, verbose):
         print("Convergence FAILURE!")
     else:
         print("Converged in %d iterations" % (converged))
+    stop = time()
+    total = (stop - start) / 1000.0
+    print(f"Elapsed Time excluding warmup: {total} ms")
     return x
 
 
@@ -121,7 +126,7 @@ def precondition(A, N, corners):
 
 
 def preconditioned_solve(
-    A, M, b, conv_iters, max_iters, conv_threshold, verbose
+    A, M, b, conv_iters, max_iters, conv_threshold, verbose, warmup
 ):
     print("Solving system with preconditioner...")
     x = np.zeros(A.shape[1])
@@ -134,7 +139,9 @@ def preconditioned_solve(
     max_iters = (
         min(max_iters, b.shape[0]) if max_iters is not None else b.shape[0]
     )
-    for i in range(max_iters):
+    for i in range(max_iters + warmup):
+        if i == warmup:
+            start = time()
         Ap = A.dot(p)
         alpha = rzold / (p.dot(Ap))
         x = x + alpha * p
@@ -158,6 +165,9 @@ def preconditioned_solve(
         print("Convergence FAILURE!")
     else:
         print("Converged in %d iterations" % (converged))
+    stop = time()
+    total = (stop - start) / 1000.0
+    print(f"Elapsed Time excluding warmup: {total} ms")
     return x
 
 
@@ -179,6 +189,7 @@ def run_cg(
     perform_check,
     timing,
     verbose,
+    warmup
 ):
     # A, b = generate_random(N)
     A, b = generate_2D(N, corners)
@@ -189,7 +200,7 @@ def run_cg(
             A, M, b, conv_iters, max_iters, conv_threshold, verbose
         )
     else:
-        x = solve(A, b, conv_iters, max_iters, conv_threshold, verbose)
+        x = solve(A, b, conv_iters, max_iters, conv_threshold, verbose, warmup)
     if perform_check:
         check(A, x, b)
     stop = time()
@@ -221,6 +232,14 @@ if __name__ == "__main__":
         default=25,
         dest="conv_iters",
         help="iterations between convergence tests",
+    )
+    parser.add_argument(
+        "-w",
+        "--warmup",
+        type=int,
+        default=1,
+        dest="warmup",
+        help="warm-up iterations",
     )
     parser.add_argument(
         "-p",
@@ -324,5 +343,6 @@ if __name__ == "__main__":
             args.check,
             args.timing,
             args.verbose,
+            args.warmup,
         ),
     )

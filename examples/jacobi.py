@@ -17,6 +17,7 @@
 
 import argparse
 import math
+import nvtx
 
 from benchmark import run_benchmark
 
@@ -40,13 +41,21 @@ def generate_random(N):
     return A, b
 
 
-def solve(A, b, iters, verbose):
+def solve(A, b, iters, verbose, warmup):
     print("Solving system...")
     x = np.zeros(A.shape[1])
     d = np.diag(A)
     R = A - np.diag(d)
-    for i in range(iters):
-        x = (b - np.dot(R, x)) / d
+    for i in range(iters + warmup):
+        with nvtx.annotate("benchmark iter", color="blue"):
+            if i == warmup:
+                start = time()
+            x = (b - np.dot(R, x)) / d
+
+    stop = time()
+    total = (stop - start) / 1000.0
+    print(f"Elapsed Time excluding warmup: {total} ms")
+
     return x
 
 
@@ -58,10 +67,10 @@ def check(A, x, b):
         print("FAIL!")
 
 
-def run_jacobi(N, iters, perform_check, timing, verbose):
+def run_jacobi(N, iters, perform_check, timing, verbose, warmup):
     A, b = generate_random(N)
     start = time()
-    x = solve(A, b, iters, verbose)
+    x = solve(A, b, iters, verbose, warmup)
     if perform_check:
         check(A, x, b)
     else:
@@ -89,6 +98,14 @@ if __name__ == "__main__":
         default=1000,
         dest="iters",
         help="number of iterations to run",
+    )
+    parser.add_argument(
+        "-w",
+        "--warmup",
+        type=int,
+        default=1,
+        dest="warmup",
+        help="warm-up iterations",
     )
     parser.add_argument(
         "-n",
@@ -160,5 +177,5 @@ if __name__ == "__main__":
         run_jacobi,
         args.benchmark,
         "Jacobi",
-        (args.N, args.iters, args.check, args.timing, args.verbose),
+        (args.N, args.iters, args.check, args.timing, args.verbose, args.warmup),
     )

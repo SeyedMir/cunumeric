@@ -17,6 +17,7 @@
 
 import argparse
 import math
+import nvtx
 
 from benchmark import run_benchmark
 
@@ -39,26 +40,32 @@ def initialize(N):
     return grid
 
 
-def run(grid, I, N):  # noqa: E741
+def run(grid, I, N, warmup):  # noqa: E741
     print("Running Jacobi stencil...")
     center = grid[1:-1, 1:-1]
     north = grid[0:-2, 1:-1]
     east = grid[1:-1, 2:]
     west = grid[1:-1, 0:-2]
     south = grid[2:, 1:-1]
-    for i in range(I):
-        average = center + north + east + west + south
-        work = 0.2 * average
-        # delta = np.sum(np.absolute(work - center))
-        center[:] = work
+    for i in range(I + warmup):
+        with nvtx.annotate("benchmark iter", color="blue"):
+            if i == warmup:
+                start = time()
+            average = center + north + east + west + south
+            work = 0.2 * average
+            # delta = np.sum(np.absolute(work - center))
+            center[:] = work
     total = np.sum(center)
+    stop = time()
+    total = (stop - start) / 1000.0
+    print(f"Elapsed Time excluding warmup: {total} ms")
     return total / (N**2)
 
 
-def run_stencil(N, I, timing):  # noqa: E741
+def run_stencil(N, I, timing, warmup):  # noqa: E741
     grid = initialize(N)
     start = time()
-    average = run(grid, I, N)
+    average = run(grid, I, N, warmup)
     stop = time()
     print("Average energy is %.8g" % average)
     total = (stop - start) / 1000.0
@@ -77,6 +84,14 @@ if __name__ == "__main__":
         default=100,
         dest="I",
         help="number of iterations to run",
+    )
+    parser.add_argument(
+        "-w",
+        "--warmup",
+        type=int,
+        default=1,
+        dest="warmup",
+        help="warm-up iterations",
     )
     parser.add_argument(
         "-n",
@@ -138,5 +153,5 @@ if __name__ == "__main__":
         import numpy as np
 
     run_benchmark(
-        run_stencil, args.benchmark, "Stencil", (args.N, args.I, args.timing)
+        run_stencil, args.benchmark, "Stencil", (args.N, args.I, args.timing, args.warmup)
     )

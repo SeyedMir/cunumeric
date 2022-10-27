@@ -17,6 +17,7 @@
 
 import argparse
 import math
+import nvtx
 
 from benchmark import run_benchmark
 
@@ -48,7 +49,7 @@ def log_likelihood(features, target, weights):
 
 
 def logistic_regression(
-    T, features, target, steps, learning_rate, sample, add_intercept=False
+    T, features, target, steps, learning_rate, sample, warmup, add_intercept=False
 ):
     if add_intercept:
         intercept = np.ones((features.shape[0], 1), dtype=T)
@@ -56,33 +57,41 @@ def logistic_regression(
 
     weights = np.zeros(features.shape[1], dtype=T)
 
-    for step in range(steps):
-        scores = np.dot(features, weights)
-        predictions = sigmoid(scores)
+    start = time()
+    for step in range(steps + warmup):
+        with nvtx.annotate("benchmark iter", color="blue"):
+            if step == warmup:
+                start = time()
+            scores = np.dot(features, weights)
+            predictions = sigmoid(scores)
 
-        error = target - predictions
-        gradient = np.dot(error, features)
-        weights += learning_rate * gradient
+            error = target - predictions
+            gradient = np.dot(error, features)
+            weights += learning_rate * gradient
 
-        if step % sample == 0:
-            print(
-                "Log Likelihood of step "
-                + str(step)
-                + ": "
-                + str(log_likelihood(features, target, weights))
-            )
+            if step % sample == 0:
+                print(
+                    "Log Likelihood of step "
+                    + str(step)
+                    + ": "
+                    + str(log_likelihood(features, target, weights))
+                )
+
+    stop = time()
+    total = (stop - start) / 1000.0
+    print(f"Elapsed Time excluding warmup: {total} ms")
 
     return weights
 
 
-def run_logistic_regression(N, F, T, I, S, B):  # noqa: E741
+def run_logistic_regression(N, F, T, I, S, W, B):  # noqa: E741
     print("Running logistic regression...")
     print("Number of data points: " + str(N) + "K")
     print("Number of features: " + str(F))
     print("Number of iterations: " + str(I))
     features, target = initialize(N * 1000, F, T)
     start = time()
-    weights = logistic_regression(T, features, target, I, 1e-5, S, B)
+    weights = logistic_regression(T, features, target, I, 1e-5, S, W, B)
     stop = time()
     # Check the weights for NaNs
     assert not math.isnan(np.sum(weights))
@@ -115,6 +124,14 @@ if __name__ == "__main__":
         default=1000,
         dest="I",
         help="number of iterations to run the algorithm for",
+    )
+    parser.add_argument(
+        "-w",
+        "--warmup",
+        type=int,
+        default=1,
+        dest="warmup",
+        help="warm-up iterations",
     )
     parser.add_argument(
         "-n",
@@ -188,21 +205,21 @@ if __name__ == "__main__":
             run_logistic_regression,
             args.benchmark,
             "LOGREG(H)",
-            (args.N, args.F, np.float16, args.I, args.S, args.B),
+            (args.N, args.F, np.float16, args.I, args.S, args.warmup, args.B),
         )
     elif args.P == 32:
         run_benchmark(
             run_logistic_regression,
             args.benchmark,
             "LOGREG(S)",
-            (args.N, args.F, np.float32, args.I, args.S, args.B),
+            (args.N, args.F, np.float32, args.I, args.S, args.warmup, args.B),
         )
     elif args.P == 64:
         run_benchmark(
             run_logistic_regression,
             args.benchmark,
             "LOGREG(D)",
-            (args.N, args.F, np.float64, args.I, args.S, args.B),
+            (args.N, args.F, np.float64, args.I, args.S, args.warmup, args.B),
         )
     else:
         raise TypeError("Precision must be one of 16, 32, or 64")

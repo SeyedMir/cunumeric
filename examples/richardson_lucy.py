@@ -17,6 +17,7 @@ import argparse
 
 from benchmark import run_benchmark
 from legate.timing import time
+import nvtx
 
 import cunumeric as np
 
@@ -31,19 +32,22 @@ def run_richardson_lucy(shape, filter_shape, num_iter, warmup, timing):
     im_deconv = np.full(image.shape, 0.5, dtype=float_type)
     psf_mirror = np.flip(psf)
 
-    start = time()
+    start1 = time()
 
     for idx in range(num_iter + warmup):
-        if idx == warmup:
-            start = time()
-        conv = np.convolve(im_deconv, psf, mode="same")
-        relative_blur = image / conv
-        im_deconv *= np.convolve(relative_blur, psf_mirror, mode="same")
+        with nvtx.annotate("benchmark iter", color="blue"):
+            if idx == warmup:
+                start2 = time()
+            conv = np.convolve(im_deconv, psf, mode="same")
+            relative_blur = image / conv
+            im_deconv *= np.convolve(relative_blur, psf_mirror, mode="same")
 
     stop = time()
-    total = (stop - start) / 1000.0
+    total1 = (stop - start1) / 1000.0
+    total2 = (stop - start2) / 1000.0
     if timing:
-        print("Elapsed Time: " + str(total) + " ms")
+        print("Elapsed Time: " + str(total1) + " ms")
+        print("Elapsed Time excluding warmup: " + str(total2) + " ms")
 
 
 if __name__ == "__main__":
